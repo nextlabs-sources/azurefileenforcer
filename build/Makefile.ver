@@ -1,0 +1,11 @@
+# Produce version information
+#
+# Description:
+#	This file should be included in top-level Makefile 
+# http://sharepoint/sites/support/release/Lists/Current%00Releases/AllItems.aspx
+
+VERSION_PRODUCT_EMSMB		= NextLabs Entitlement Manager For SMB
+VERSION_MAJOR_EMSMB			= 1
+VERSION_MINOR_EMSMB			= 1
+VERSION_MAINTENANCE_EMSMB	= 0
+VERSION_PATCH_EMSMB			= 0

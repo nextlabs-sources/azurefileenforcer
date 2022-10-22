@@ -1,0 +1,157 @@
+# Common make file for building installers
+#
+# IsCmdBld.exe commandline options:
+#	-a <product configuration>
+#	-b Output directory
+#	-n								No compile
+#	-p <ISM file>
+#	-q3                             Only compile setup.rul
+#	-r <release name>
+#	-x								Stop on error
+#	-y <product version>
+
+
+#
+# Prepare environment
+#
+
+CURRENT_MKFILE_PATH    := $(abspath $(lastword $(MAKEFILE_LIST)))
+CURRENT_MKFILE_DIRPATH := $(dir $(CURRENT_MKFILE_PATH))
+
+ifeq ($(ProgramW6432), )
+	ENV_OS=x86
+	PROGRAM_FILES_X86=C:/Program Files
+else
+	ENV_OS=x64
+	PROGRAM_FILES_X86=C:/Program Files (x86)
+endif
+
+PROGRAM_FILES_X86_DOS=$(subst /,\,$(PROGRAM_FILES_X86))
+
+PERL=/usr/bin/perl
+ISCMDBLD=$(PROGRAM_FILES_X86)/InstallShield/2014 SAB/System/IsCmdBld.exe
+SIGNTOOL_OFFICIAL_TOOL=$(PROGRAM_FILES_X86)/Windows Kits/8.1/bin/x64/signtool.exe
+SIGNTOOL_OFFICIAL_ARGS=sign /ac c:/release/bin/DigiCertAssuredIDRootCA.cer /f c:/release/bin/NextLabs.pfx /p IiVf1itvOrqJ /n "NextLabs Inc." /fd sha256 /tr http://timestamp.digicert.com
+SIGNTOOL_OFFICIAL='$(SIGNTOOL_OFFICIAL_TOOL)' $(SIGNTOOL_OFFICIAL_ARGS)
+
+OFFICIALCERT=0
+VERSION_STR=$(VERSION_MAJOR_EMSMB).$(VERSION_MINOR_EMSMB)
+VERSION_BUILD_SHORT=$(VERSION_BUILD_SHORT)
+
+INSTALL_DIR=$(NLBUILDROOT)/install
+SCRIPT_DIR=$(INSTALL_DIR)/ism
+INSTALL_BUILD_DIR=$(INSTALL_DIR)/build
+ASSEMBLY_DIR=$(INSTALL_BUILD_DIR)/data
+OUTPUT_DIR=$(INSTALL_BUILD_DIR)/output
+PACKAGE64_DIR=$(INSTALL_BUILD_DIR)/package64
+PACKAGE_FILE64=$(basename $(MSI_FILE64))-$(VERSION_STR)-$(VERSION_BUILD_SHORT)-$(shell date +"%Y%m%d%H%M").zip
+PUBLISH_DIR=$(NLBUILDROOT)/bin/installer
+BUILD_DIR=$(subst /,\,$(ASSEMBLY_DIR))
+DEPLOY_DIR=$(subst /,\,$(OUTPUT_DIR))
+ISM_FILE_DIR=$(SCRIPT_DIR)
+
+EETEMPDIR := $(shell mktemp -d)
+
+TARGETS=
+
+ifneq ($(ISM_PRODUCT_CONFIG64), )
+	TARGETS+= installer64
+endif
+
+
+#
+# Print environment
+#
+
+$(info -----------------------------------------------------------------------------)
+$(info BUILDTYPE                   = $(BUILDTYPE))
+$(info VERSION_BUILD               = $(VERSION_BUILD))
+$(info VERSION_BUILD_SHORT         = $(VERSION_BUILD_SHORT))
+$(info BUILD_NUMBER                = $(BUILD_NUMBER))
+$(info OFFICIALCERT                = $(OFFICIALCERT))
+$(info Product directory name      = $(PRODUCT_DIR_NAME))
+$(info Packaging list              = $(PACKAGE_LIST))
+$(info Install directory           = $(INSTALL_DIR))
+$(info Assembly directory          = $(ASSEMBLY_DIR))
+$(info Output directory            = $(OUTPUT_DIR))
+$(info Package directory (64-bit)  = $(PACKAGE64_DIR))
+$(info Package file (64-bit)       = $(PACKAGE_FILE64))
+$(info Publish directory           = $(PUBLISH_DIR))
+$(info Current OS                  = $(ENV_OS))
+$(info Program files (x86)         = $(PROGRAM_FILES_X86))
+$(info Program files (x86) DOS     = $(PROGRAM_FILES_X86_DOS))
+$(info ISM_TEMPLATE_FILE_NAME_X86  = $(ISM_TEMPLATE_FILE_NAME_X86))
+$(info ISM_TEMPLATE_FILE_NAME_X64  = $(ISM_TEMPLATE_FILE_NAME_X64))
+$(info ISM release                 = $(ISM_RELEASE))
+$(info ISM product config (64-bit) = $(ISM_PRODUCT_CONFIG64))
+$(info ISM output directory        = $(DEPLOY_DIR))
+$(info -----------------------------------------------------------------------------)
+
+INSTALL_ROOT=${NLBUILDROOT}/install/ism/files
+FILEINFO_ROOT=$(INSTALL_ROOT)/AzureFileInfoServer1.1_x64_4/FileInfoServer
+PROXY_ROOT=$(INSTALL_ROOT)/AzureFileEnforcer1.1_x64_4/SMBProxy
+
+#
+# Targets
+#
+
+.PHONY: all
+all:$(TARGETS) publish
+.PHONY: assembly
+assembly:
+	@echo "INFO: Prepare assembly for file info"
+	mkdir -p $(FILEINFO_ROOT)
+	mkdir -p $(PROXY_ROOT)/modules/smb
+	cp $(NLBUILDROOT)/prod/pep/FileTagService/install/FilterPack64bit.exe $(FILEINFO_ROOT)
+	cp $(NLBUILDROOT)/prod/pep/FileTagService/install/IFilterTextReader.dll $(FILEINFO_ROOT)
+	cp $(NLBUILDROOT)/prod/pep/FileTagService/install/log4net.dll $(FILEINFO_ROOT)
+	cp $(NLBUILDROOT)/prod/pep/FileTagService/install/PDFFilter64Setup.msi $(FILEINFO_ROOT)
+	cp $(NLBUILDROOT)/prod/pep/FileTagService/install/register_fileinfosrv.bat $(FILEINFO_ROOT)
+	cp $(NLBUILDROOT)/prod/pep/FileTagService/install/unregister_fileinfosrv.bat $(FILEINFO_ROOT)
+	cp $(NLBUILDROOT)/prod/pep/FileTagService/install/App.config $(FILEINFO_ROOT)
+	cp $(NLBUILDROOT)/bin/release_win_x64/SocketServer.exe $(FILEINFO_ROOT)
+	cp $(NLBUILDROOT)/bin/release_win_x64/SocketServiceWrapper.exe $(FILEINFO_ROOT)
+	cp $(NLBUILDROOT)/bin/release_win_x64/SocketServiceWrapper.exe $(FILEINFO_ROOT)
+	@echo "INFO: Prepare assembly for proxy"
+	cp -pf ${MSENFORCECOMMON}/bin/${BUILDTYPE}_win_x64/policy_engine.dll $(PROXY_ROOT)
+	cp -pf ${MSENFORCECOMMON}/bin/${BUILDTYPE}_win_x64/QueryCloudAZSDKcpp.dll $(PROXY_ROOT)
+	cp -pf ${MSENFORCECOMMON}/bin/${BUILDTYPE}_win_x64/frame.dll $(PROXY_ROOT)
+	cp -pf ${MSENFORCECOMMON}/bin/${BUILDTYPE}_win_x64/celog.dll $(PROXY_ROOT)
+	cp -pf ${MSENFORCECOMMON}/bin/${BUILDTYPE}_win_x64/proxymain.exe $(PROXY_ROOT)
+	cp -pf ${MSENFORCECOMMON}/thirdpart/x64-windows/release/bin/*.dll $(PROXY_ROOT)
+	cp -pf ${NLBUILDROOT}/prod/pep/AzureFileEnforce/smb/install/*.* $(PROXY_ROOT)
+	echo "EMSMB v$(VERSION_STR)-$(VERSION_BUILD_SHORT)" > $(PROXY_ROOT)/README.txt
+	cp -pf ${NLBUILDROOT}/install/ism/installhelp/WriteCfg.exe $(PROXY_ROOT)
+	cp -pf ${NLBUILDROOT}/bin/${BUILDTYPE}_win_x64/smb.dll $(PROXY_ROOT)/modules/smb
+	cp -pf ${NLBUILDROOT}/prod/pep/AzureFileEnforce/smb/config/config.ini $(PROXY_ROOT)/modules/smb
+	cp -pf ${NLBUILDROOT}/prod/pep/AzureFileEnforce/smb/config/log.conf $(PROXY_ROOT)/modules/smb
+
+.PHONY: installer64
+installer64: assembly
+	@echo "INFO: Create 64-bit installer package"
+	'$(ISCMDBLD)' -x -r SINGLE_MSI_IMAGE -p "$(ISM_FILE_DIR)/$(ISM_TEMPLATE_FILE_NAME_X64)" -b "$(DEPLOY_DIR)"
+	@if [ $(OFFICIALCERT) -ne 0 ]; then \
+		echo "INFO: Signing $(MSI_FILE64) msi file" ; \
+		echo "'$(SIGNTOOL_OFFICIAL_TOOL)' $(SIGNTOOL_OFFICIAL_ARGS) $(OUTPUT_DIR)/PROJECT_ASSISTANT/SINGLE_MSI_IMAGE/DiskImages/DISK1/$(MSI_FILE64)" ; \
+		'$(SIGNTOOL_OFFICIAL_TOOL)' $(SIGNTOOL_OFFICIAL_ARGS) $(OUTPUT_DIR)/PROJECT_ASSISTANT/SINGLE_MSI_IMAGE/DiskImages/DISK1/$(MSI_FILE64) ; \
+	fi
+
+.PHONY: clean
+clean:
+	@rm -rf $(INSTALL_BUILD_DIR)
+
+.PHONY: publish
+publish:
+	@echo "INFO: Publish installer packages"
+	@if [ "$(MSI_FILE64)" != "" ]; then \
+		echo "INFO:   Create 64-bit installer package" ; \
+		mkdir -p $(PACKAGE64_DIR) ; \
+		cp $(OUTPUT_DIR)/PROJECT_ASSISTANT/SINGLE_MSI_IMAGE/DiskImages/DISK1/$(MSI_FILE64) $(PACKAGE64_DIR) ; \
+		cp -pf ${MSENFORCECOMMON}/bin/${BUILDTYPE}_win_x64/QueryCloudAZSDKcpp.pdb $(PACKAGE64_DIR) ; \
+		cp -pf ${NLBUILDROOT}/bin/${BUILDTYPE}_win_x64/smb.pdb $(PACKAGE64_DIR) ; \
+		cd $(PACKAGE64_DIR); zip ../$(PACKAGE_FILE64) * ; \
+	fi
+	mkdir -p $(PUBLISH_DIR)
+	cp -pf $(INSTALL_BUILD_DIR)/*.zip $(PUBLISH_DIR)
+	@echo "INFO:   Content of $(PUBLISH_DIR)"
+	@ls -al $(PUBLISH_DIR)

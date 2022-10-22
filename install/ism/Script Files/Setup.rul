@@ -1,0 +1,154 @@
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            
+//  This template script provides the code necessary to build an entry-point 
+//  function to be called in an InstallScript custom action. 
+//                                                                            
+//                                                                            
+//    File Name:  Setup.rul                                                   
+//                                                                            
+//  Description:  InstallShield script                                        
+//
+////////////////////////////////////////////////////////////////////////////////
+
+// Include Ifx.h for built-in InstallScript function prototypes, for Windows 
+// Installer API function prototypes and constants, and to declare code for 
+// the OnBegin and OnEnd events.
+#include "ifx.h"
+
+// The keyword export identifies MyFunction() as an entry-point function.
+// The argument it accepts must be a handle to the Installer database.
+export prototype InstallSelectedApp(HWND);
+
+export prototype UnInstallSelectedApp(HWND);
+
+export prototype SetUserAccount(HWND);
+// To Do:  Declare global variables, define constants, and prototype user-
+//         defined and DLL functions here.
+
+
+// To Do:  Create a custom action for this entry-point function:
+// 1.  Right-click on "Custom Actions" in the Sequences/Actions view.
+// 2.  Select "Custom Action Wizard" from the context menu.
+// 3.  Proceed through the wizard and give the custom action a unique name.
+// 4.  Select "Run InstallScript code" for the custom action type, and in
+//     the next panel select "MyFunction" (or the new name of the entry-
+//     point function) for the source.
+// 5.  Click Next, accepting the default selections until the wizard
+//     creates the custom action.
+//
+// Once you have made a custom action, you must execute it in your setup by
+// inserting it into a sequence or making it the result of a dialog's
+// control event.
+
+///////////////////////////////////////////////////////////////////////////////
+//                                                                           
+// Function:  MyFunction
+//                                                                           
+//  Purpose:  This function will be called by the script engine when
+//            Windows(TM) Installer executes your custom action (see the "To
+//            Do," above).
+//                                                                           
+///////////////////////////////////////////////////////////////////////////////
+
+function SetUserAccount(hMSI)
+	STRING strUser;
+	STRING strPwd;
+	NUMBER szBufLen;
+	STRING szProgram; 
+	STRING strPath;
+	STRING svResult;
+	STRING svParam;
+	STRING strMsg;
+begin
+
+	szBufLen = 64;
+	MsiGetProperty(hMSI,"SMBUSERNAME",strUser,szBufLen);
+	szBufLen = 64;
+	MsiGetProperty(hMSI,"SMBUSERPASSWORD",strPwd,szBufLen);
+		
+	if(strUser = "" || strPwd == "")	then
+		MessageBox("User account and password can't be empty.",INFORMATION);
+		MsiSetProperty(hMSI,"VALIDATE_USERACCOUNT","Fail");
+		abort ;
+	endif;
+	
+	MsiSetProperty(hMSI,"VALIDATE_USERACCOUNT","Pass");
+	MsiGetProperty(hMSI,"VALIDATE_USERACCOUNT",strUser,szBufLen);
+		
+end;
+
+///////////////////////////////////////////////////////////////////////////////
+function UnInstallSelectedApp(hMSI)
+	STRING szFilePath;
+	STRING strMsg;
+begin 
+
+	szFilePath = TARGETDIR^"SMBProxy\\unregister_smbsrv.bat"; 
+	LaunchAppAndWait(szFilePath, "",LAAW_OPTION_WAIT | LAAW_OPTION_HIDDEN);
+	
+	szFilePath = TARGETDIR^"FileInfoServer\\unregister_fileinfosrv.bat";
+	LaunchAppAndWait(szFilePath, "",LAAW_OPTION_WAIT | LAAW_OPTION_HIDDEN) ;
+end;
+
+///////////////////////////////////////////////////////////////////////////////
+function InstallSelectedApp(hMSI)
+    // To Do:  Declare local variables.
+	STRING szProgram;
+	STRING szParam;
+	STRING svMsiexec;
+	STRING svResult;
+	STRING strFilePath;
+	STRING strMsg;
+	NUMBER pathSize;  
+	STRING strUser;
+	STRING strPwd;
+begin
+	pathSize = 64;
+	MsiGetProperty(hMSI,"_IsMaintenance",svResult,pathSize);
+	if(svResult = "REMOVE") then	// only run during install
+		abort ;
+	endif;
+	// check SMB 
+	if MsiEvaluateCondition(hMSI, "CKBOX_SMB") = MSICONDITION_TRUE then
+		pathSize = 64;
+		MsiGetProperty(hMSI,"SMBUSERNAME",strUser,pathSize);
+		pathSize = 64;
+		MsiGetProperty(hMSI,"SMBUSERPASSWORD",strPwd,pathSize);
+		// write user info to cfg 
+		szProgram = "WriteCfg.exe";
+		strFilePath = TARGETDIR^"SMBProxy";
+		if(FindFile(strFilePath,szProgram,svResult) = 0) then
+			// invoke writecfg.exe to write pwd to cfg file
+			strFilePath  = TARGETDIR^"SMBProxy\\" +  szProgram;
+			szParam = "\"" + strUser + "\" \"" + strPwd + "\"";
+			strMsg = "Run [" + strFilePath + "] and parameter: [" + szParam + "]";
+			LaunchAppAndWait(strFilePath,szParam,LAAW_OPTION_WAIT | LAAW_OPTION_HIDDEN);
+		endif;
+	
+		// install smb proxy, register it
+		szProgram = TARGETDIR^"SMBProxy\\register_smbsrv.bat"; 
+		if(LaunchAppAndWait(szProgram, "",LAAW_OPTION_WAIT | LAAW_OPTION_HIDDEN) < 0) then
+			MessageBox("register smb failed.",INFORMATION);
+		endif;
+	endif;
+	
+	// check FileInfo
+	if MsiEvaluateCondition(hMSI, "CKBOX_FILEINFO") = MSICONDITION_TRUE then
+
+		// check and install office filter	
+		strFilePath = ProgramFiles64Folder^"Common Files\\Microsoft Shared\\Filters";
+		if(FindFile(strFilePath,"offfilt.dll",svResult)<0) then
+			szProgram =TARGETDIR^"FileInfoServer\\FilterPack64bit.exe";
+			szParam = ""; 
+			if(LaunchAppAndWait(szProgram, szParam,LAAW_OPTION_WAIT | LAAW_OPTION_HIDDEN) < 0)	then
+				MessageBox("run office filter failed.",INFORMATION);
+			endif;
+		endif;
+		
+		// register file info server
+		szProgram = TARGETDIR^"FileInfoServer\\register_fileinfosrv.bat"; 
+		szParam = ""; 
+		LaunchAppAndWait(szProgram, szParam, LAAW_OPTION_WAIT | LAAW_OPTION_HIDDEN);
+	endif;
+
+end;

@@ -1,0 +1,109 @@
+# Makefile to get external header files and libraries produced by another branch
+# on a separate compile
+#
+# IMPORTANT
+#	The rules of using xlib are simple:
+#		1. Anything to compile a source tree that does not come off Perforce under
+#			this source branch or //depot/external/... belongs to $(NLBUILDROOT)/xlib.
+#		2. This source tree should not have any external reference other than
+#			to headers and libraries in //depot/external/... or $(NLBUILDROOT)/xlib.
+#			Any hidden external references makes the source tree hard to maintain.
+#		3. You are assumed to build up $(NLBUILDROOT)/xlib before compiling any
+#			source in the source tree. As a result, external references should point
+#			to $(NLBUILDROOT)/xlib. For example, NLCC need agent-pf.jar. That file
+#			must be available in $(NLBUILDROOT)/xlib/java before compilation starts.
+#		4. There are may ways to prepare $(NLBUILDROOT)/xlib. Choose whatever way
+#			you like. The standard way right now is pulling header files, .jar files
+#			and .dlls from release artifact .zip files. You may choose to use Ivy
+#			to pull the right version of these files. You may also copy xlib directory
+#			from release or nightly build.
+#
+# USAGE
+#	Before you compile this source tree, you must do one of the followings:
+#		1. Run Makefile.xlib to populate $(NLBUILDROOT)/xlib
+#			cd $(NLBUILDROOT)
+#			./configure --type=dev
+#			source build.config
+#			make -f build/Makefile.xlib
+#		2. Copy a xlib directory from nightly or release build and place it under
+#			$(NLBUILDROOT)/xlib
+#		3. Unzip xlib*.zip file from build artifacts
+
+
+#
+# Check for errors
+#
+
+ifeq ($(NLBUILDROOT),)
+  $(error ERROR: NLBUILDROOT undefined)
+endif
+
+ifeq ($(NLEXTERNALDIR),)
+  $(error ERROR: NLEXTERNALDIR undefined)
+endif
+
+ifeq ($(NLEXTERNALDIR2),)
+  $(error ERROR: NLEXTERNALDIR2 undefined)
+endif
+
+ifeq ($(XLIB_PC831000_FATE_INSTALL_SMALL_ZIP_FILE),)
+  $(error ERROR: XLIB_PC831000_FATE_INSTALL_SMALL_ZIP_FILE undefined)
+endif
+
+#
+# Default values
+#
+
+ifneq ($(BUILDTYPE), debug)
+	BUILDTYPE=release
+endif
+
+XLIB_DIR=$(NLBUILDROOT)/xlib
+XLIB_JRE32_DIR=$(XLIB_DIR)/jre_x86
+XLIB_JRE64_DIR=$(XLIB_DIR)/jre_x64
+
+$(info ----------------------------------------------------------------------------------------------)
+$(info --- Makefile.xlib ---)
+$(info BUILDTYPE                                  = $(BUILDTYPE))
+$(info XLIB_PC775_FATE_INSTALL_ZIP_FILE           = $(XLIB_PC775_FATE_INSTALL_ZIP_FILE))
+$(info XLIB_PC831000_FATE_INSTALL_SMALL_ZIP_FILE  = $(XLIB_PC831000_FATE_INSTALL_SMALL_ZIP_FILE))
+$(info NLBUILDROOT                                = $(NLBUILDROOT))
+$(info NLEXTERNALDIR                              = $(NLEXTERNALDIR))
+$(info NLEXTERNALDIR2                             = $(NLEXTERNALDIR2))
+$(info ----------------------------------------------------------------------------------------------)
+
+
+.PHONY: all
+all: prepare_pc831000_fate_xlib prepare_pc775_fate_xlib prepare_external_jre_x86 prepare_external_jre_x64
+
+.PHONY: prepare_pc831000_fate_xlib
+prepare_pc831000_fate_xlib:
+	@rm -rf $(XLIB_DIR)/pc_8.3.0.1000/
+	@mkdir -p $(XLIB_DIR)/pc_8.3.0.1000/
+	unzip -o $(XLIB_PC831000_FATE_INSTALL_SMALL_ZIP_FILE) \
+		'install/*' \
+		-x '*/*.zip' '*/*.msi' \
+		-d $(XLIB_DIR)/pc_8.3.0.1000/
+
+.PHONY: prepare_pc775_fate_xlib
+prepare_pc775_fate_xlib:
+	@rm -rf $(XLIB_DIR)/pc_7.7.5/
+	@mkdir -p $(XLIB_DIR)/pc_7.7.5/
+	unzip -o $(XLIB_PC775_FATE_INSTALL_ZIP_FILE) \
+		'install/*' \
+		-x '*/*.zip' '*/*.msi' \
+		-d $(XLIB_DIR)/pc_7.7.5/
+
+.PHONY: prepare_external_jre_x86
+prepare_external_jre_x86:
+	@mkdir -p $(XLIB_JRE32_DIR)
+	cp -pfR "$(NLEXTERNALDIR)/j2sdk/jre_1.7.0_71/" "$(XLIB_JRE32_DIR)/"
+
+.PHONY: prepare_external_jre_x64
+prepare_external_jre_x64:
+	@mkdir -p $(XLIB_JRE64_DIR)
+	cp -pfR "$(NLEXTERNALDIR)/j2sdk/jre_1.7.0_71/" "$(XLIB_JRE64_DIR)/"
+
+.PHONY: clean
+clean:
+	rm -rf $(XLIB_DIR)

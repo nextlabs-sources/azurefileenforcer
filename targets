@@ -1,0 +1,4 @@
+TARGETS = prod/pep/AzureFileEnforce/smb \
+          prod/pep/FileTagService/IFilterTextReader \
+          prod/pep/FileTagService/SocketServer \
+          prod/pep/FileTagService/SocketServiceWrapper

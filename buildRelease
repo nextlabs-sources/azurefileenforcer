@@ -1,0 +1,180 @@
+#!/bin/bash
+#
+# DESCRIPTION
+#	Invoke release build
+#
+# USAGE:
+#	Steps to invoke this script.
+#		export NLEXTERNALDIR=<path>
+#		export BUILD_NUMBER=<#>
+#		source ./setEnv
+#		./buildRelease
+#
+# HUDSON BUILD:
+#	cd $WORKSPACE/D_SiriusR2
+#	export NLEXTERNALDIR=C:/hudson/jobs/external_latest/workspace/external
+#	source ./setEnv
+#	./buildRelease
+#
+# Build Options:
+#	Note that you can specific installer target (i.e., install_*) without specifying compile 
+#	targets first (i.e., pc, kmc, wde or devtools). However, it is easier to understand if 
+#	we specify compile targets before installer targets.
+#
+#	make -f build/Makefile.compile || exit $?
+#	make -f build/Makefile.compile compile_pc compile_kmc compile_lme compile_ne compile_oce compile_oe compile_rde compile_se compile_wde compile_devtool install_pc install_kmc install_lme install_ne install_oce install_oe install_rde install_se install_wde install_support || exit $?
+#
+# Publish Options:
+#	Note that target "pc" refers to publishing PC installers. It should only be called
+#	after calling install/pc/buildInstaller at this time. Here is a quick summary of
+#	definition popular targets:
+#		wde: wde_local wde_sync
+#		pC: pc_local pc_sync
+#		support: sdk reskit
+#		archive: archive_bin archive_xlib archive_symbol archive_install
+#
+#	make -f build/Makefile.publish TYPE=release || exit $?
+#	make -f build/Makefile.publish TYPE=release kmc lme ne oce oe rde se wde pc support archive || exit $
+
+
+LOG_FILE=buildRelease.log
+BUILD_MANIFEST_FILE=build.manifest
+
+(
+set -x
+# Extract Perforce Workspace and Hudson info (only if running on Hudson)
+if [ -f ../config.xml ]; then
+	build/getGitWorkspaceInfo.pl ../config.xml
+fi
+
+# Prepare environment
+./configure --type=release --mapBuildRoot=g || exit $?
+export MSENFORCECOMMON=C:/Jenkins/jobs/release_MSEnforcerCommon_master/workspace
+
+source build.config
+
+# Prepare dependencies
+#make -f build/Makefile.xlib
+
+# Compile  code
+make -f build/Makefile.compile compile || exit $?
+
+#copy file to installer folder
+INSTALL_ROOT=${NLBUILDROOT}/install
+mkdir $INSTALL_ROOT
+
+#copy proxy
+#PROXY_ROOT=$INSTALL_ROOT/SMBProxy
+#mkdir $PROXY_ROOT
+#cp -pf ${MSENFORCECOMMON}/bin/${BUILDTYPE}_win_x64/QueryCloudAZSDKcpp.dll $PROXY_ROOT
+#cp -pf ${MSENFORCECOMMON}/bin/${BUILDTYPE}_win_x64/frame.dll $PROXY_ROOT
+#cp -pf ${MSENFORCECOMMON}/bin/${BUILDTYPE}_win_x64/celog.dll $PROXY_ROOT
+#cp -pf ${MSENFORCECOMMON}/bin/${BUILDTYPE}_win_x64/proxymain.exe $PROXY_ROOT
+#cp -pf ${MSENFORCECOMMON}/thirdpart/x64-windows/release/bin/*.dll $PROXY_ROOT
+#cp -pf ${NLBUILDROOT}/prod/pep/AzureFileEnforce/smb/install/*.* $PROXY_ROOT
+
+#mkdir $PROXY_ROOT/modules
+#mkdir $PROXY_ROOT/modules/smb
+#cp -pf ${NLBUILDROOT}/bin/${BUILDTYPE}_win_x64/smb.dll $PROXY_ROOT/modules/smb
+#cp -pf ${NLBUILDROOT}/prod/pep/AzureFileEnforce/smb/config/config.ini $PROXY_ROOT/modules/smb
+
+#File Info Server
+#FILE_INFO_SRV_ROOT=$INSTALL_ROOT/FileInfoServer
+#mkdir $FILE_INFO_SRV_ROOT
+#cp -pf ${NLBUILDROOT}/bin/${BUILDTYPE}_win_x64/SocketServer.exe  $FILE_INFO_SRV_ROOT
+#cp -pf ${NLBUILDROOT}/bin/${BUILDTYPE}_win_x64/IFilterTextReader.dll $FILE_INFO_SRV_ROOT
+#cp -pf ${NLBUILDROOT}/bin/${BUILDTYPE}_win_x64/SocketServiceWrapper.exe $FILE_INFO_SRV_ROOT
+#cp -pf ${NLBUILDROOT}/prod/pep/FileTagService/SocketServer/dependence/*.dll $FILE_INFO_SRV_ROOT
+#cp -pf ${NLBUILDROOT}/prod/pep/FileTagService/install/*.* $FILE_INFO_SRV_ROOT
+
+#copy pdb
+#PDB_ROOT=$INSTALL_ROOT/pdb
+#mkdir $PDB_ROOT
+#cp -pf ${NLBUILDROOT}/bin/${BUILDTYPE}_win_x64/*.pdb $PDB_ROOT
+#cp -pf ${MSENFORCECOMMON}/bin/${BUILDTYPE}_win_x64/*.pdb $PDB_ROOT
+
+# make install package
+make -f install/ism/Makefile ${MAKE_INSTALLFLAGS} VERSION_BUILD_SHORT=${VERSION_BUILD_SHORT} || exit $?
+
+#zip
+#cd $INSTALL_ROOT
+#zip -q -r AzureFileEnforcer1.1_x64_${VERSION_BUILD}.zip SMBProxy pdb
+#zip -q -r AzureFileInfoServer1.1_x64_${VERSION_BUILD}.zip FileInfoServer
+#rm -r SMBProxy
+#rm -r FileInfoServer
+#cd ${NLBUILDROOT}
+
+
+##
+# Let's do some code-signing for files going into the final installer package
+# Since this is a Release build - we will be signing using the NextLabs production certificate
+# Code-signing can be turned off from shell if we define a shell variable NOCODESIGN
+##
+#if [ "X${NOCODESIGN}" = "X"  ] ; then
+	# Check for the availability of the NextLabs certificate
+#	if [ -f 'C:/release/bin/NextLabs.pfx' ] ; then
+#		export NEXTLABS_CERT_FILE='C:/release/bin/NextLabs.pfx'
+#	else
+#		echo "ERROR: Unable to find NextLabs.pfx certificate for code-signing. If you want to turn off code-signing, define a shell variable NOCODESIGN."
+#		exit -1
+#	fi
+
+	# Check for the availability of the Microsoft cross-cert
+#	if [ -f 'C:/release/bin/DigiCertAssuredIDRootCA.cer' ] ; then
+#		export MSCV_CROSS_CERT_FILE='C:/release/bin/DigiCertAssuredIDRootCA.cer'
+#	else
+#		echo "ERROR: Unable to find Microsoft cross-cert required for release build code-signing. If you want to turn off code-signing, define a shell variable NOCODESIGN."
+#		exit -1
+#	fi
+
+	# Check for the availability of Win8SDK's signtool
+#	if [ -f 'C:/Program Files (x86)/Windows Kits/8.1/bin/x64/signtool.exe' ] ; then
+#		SIGNTOOL_OFFICIAL_TOOL='C:/Program Files (x86)/Windows Kits/8.1/bin/x64/signtool.exe'
+#	else
+#		echo "ERROR: Unable to find signtool command required for code-signing. If you want to turn off code-signing, define a shell variable NOCODESIGN."
+#		exit -1
+#	fi
+
+	##
+	# Find all signable files and send them for signing
+	# Currently supported formats: exe, dll
+	##
+#	cd ${WORKSPACE}
+#	"${SIGNTOOL_OFFICIAL_TOOL}" sign \
+#		/ac "${MSCV_CROSS_CERT_FILE}" \
+#		/f "${NEXTLABS_CERT_FILE}" \
+#		/p IiVf1itvOrqJ \
+#		/n 'NextLabs Inc.' \
+#		/fd sha256 \
+#		/t http://timestamp.digicert.com \
+#		`find C:/Jenkins/jobs/release_WFSE_master/workspace/bin -type f | egrep -e '\.(exe|dll|cat|sys)$' | xargs cygpath --mixed`
+#fi
+
+# Create the installer
+# make -f build/Makefile.compile install_wfse || exit $?
+
+# Publish packages and artifacts to BODA only if PUBLISH_TO_BODA environment variable is set
+#if [ "X${PUBLISH_TO_BODA}" = "XYes" -o "X${PUBLISH_TO_BODA}" = "Xyes" -o "X${PUBLISH_TO_BODA}" = "XYES" -o "X${PUBLISH_TO_BODA}" = "X1" ]
+#then
+	# Publish installers and artifacts
+#	make -f build/Makefile.publish TYPE=release wfse archive || exit $?
+#fi
+
+# Create and publish build manifest
+# build/createBuildManifest.pl $LOG_FILE > $BUILD_MANIFEST_FILE || exit $?
+
+# Publish build-manifest to BODA only if PUBLISH_TO_BODA environment variable is set
+# if [ "X${PUBLISH_TO_BODA}" = "XYes" -o "X${PUBLISH_TO_BODA}" = "Xyes" -o "X${PUBLISH_TO_BODA}" = "XYES" -o "X${PUBLISH_TO_BODA}" = "X1" ]
+#then
+#	make -f build/Makefile.publish TYPE=release manifest || exit $?
+#fi
+#set +x
+
+echo
+echo
+echo "####################### BUILD MANIFEST CONTENTS ########################"
+#cat ${WORKSPACE}/${BUILD_MANIFEST_FILE}
+echo "########################################################################"
+) 2>&1 | tee $LOG_FILE
+
+exit ${PIPESTATUS[0]}

@@ -1,0 +1,200 @@
+# Make file to publish pcv and release builds
+#
+# Installers and build artifacts are published to \\nextlabs.com\share\data\build\pcv
+# or \\nextlabs.com\share\data\build\release. Typically, \\nextlabs.com\share\data is mapped
+# to s:/.
+#
+# The following variables must be defined in commandline:
+#	VERSION_BUILD_SHORT
+#	BUILD_DATE
+#
+# Example:
+#	make -f Makefile.publish VERSION_BUILD_SHORT=2088 BUILD_DATE=20110501 TYPE=pcv
+#	make -k -f Makefile.publish VERSION_BUILD_SHORT=2088 BUILD_DATE=20110501 TYPE=pcv installer_local
+#	make -k -f Makefile.publish VERSION_BUILD_SHORT=2088 BUILD_DATE=20110501 TYPE=pcv installer_local
+#	make -f Makefile.publish VERSION_BUILD_SHORT=2088 BUILD_DATE=20110501 TYPE=release
+#	make -f Makefile.publish VERSION_BUILD_SHORT=2088 BUILD_DATE=20110501 TYPE=release wfse_sync oe_sync ne_sync
+#	make -f Makefile.publish VERSION_BUILD_SHORT=2088 BUILD_DATE=20110501 TYPE=release archive_bin
+
+
+#
+# Check for errors
+#
+
+ifeq ($(NLBUILDROOT),)
+  $(error NLBUILDROOT undefined.)
+endif
+
+ifeq ($(VERSION_BUILD_SHORT),)
+  $(error VERSION_BUILD_SHORT undefined.)
+endif
+
+ifeq ($(BUILD_DATE),)
+  $(error BUILD_DATE undefined.)
+endif
+
+ifeq ($(TYPE),)
+  $(error TYPE undefined.)
+endif
+
+ifneq ($(TYPE), pcv)
+ifneq ($(TYPE), release)
+  $(error Invalid TYPE $(TYPE).)
+endif
+endif
+
+ifeq ($(REPOSITORY_ROOT),)
+  $(error REPOSITORY_ROOT undefined.)
+endif
+
+
+#
+# Constants
+#
+
+include $(NLBUILDROOT)/build/Makefile.ver
+
+VERSION_STR_EDP=$(VERSION_MAJOR_EDP).$(VERSION_MINOR_EDP).$(VERSION_MAINTENANCE_EDP).$(VERSION_PATCH_EDP)
+VERSION_STR_WFSE=$(VERSION_MAJOR_WFSE).$(VERSION_MINOR_WFSE).$(VERSION_MAINTENANCE_WFSE).$(VERSION_PATCH_WFSE)
+
+PUBLISH_LOCAL_WFSE_DIR=$(REPOSITORY_ROOT)/WindowsFileServerEnforcer/$(VERSION_STR_WFSE)/$(VERSION_BUILD_SHORT)
+PUBLISH_LOCAL_ARTIFACT_DIR=$(REPOSITORY_ROOT)/artifacts/Fate/$(VERSION_STR_EDP)/$(VERSION_BUILD_SHORT)
+
+ZIP_FILE_NAME_BIN=fate-$(VERSION_STR_EDP)-$(VERSION_BUILD_SHORT)-$(TYPE)-$(BUILD_DATE)-bin.zip
+ZIP_FILE_NAME_XLIB=fate-$(VERSION_STR_EDP)-$(VERSION_BUILD_SHORT)-$(TYPE)-$(BUILD_DATE)-xlib.zip
+ZIP_FILE_NAME_INSTALL=fate-$(VERSION_STR_EDP)-$(VERSION_BUILD_SHORT)-$(TYPE)-$(BUILD_DATE)-install.zip
+ZIP_FILE_NAME_INSTALL_SMALL=fate-$(VERSION_STR_EDP)-$(VERSION_BUILD_SHORT)-$(TYPE)-$(BUILD_DATE)-install-small.zip
+ZIP_FILE_NAME_PCOE_INSTALL=pc-$(VERSION_STR_PCOE)-$(VERSION_BUILD_SHORT)-$(TYPE)-$(BUILD_DATE)-install.zip
+ZIP_FILE_NAME_SYMBOL=fate-$(VERSION_STR_EDP)-$(VERSION_BUILD_SHORT)-$(TYPE)-$(BUILD_DATE)-symbol.zip
+BUILD_MANIFEST_FILE_NAME=build.manifest
+
+TOP_BIN_DIR=$(NLBUILDROOT)/bin
+XLIB_DIR=$(NLBUILDROOT)/xlib
+INSTALL_DIR=$(NLBUILDROOT)/install
+
+PUBLISH_DIR=$(NLBUILDROOT)/bin/installer
+
+#
+# Info
+#
+
+$(info --------------------------------------------------------------)
+$(info [Build])
+$(info TYPE                          = $(TYPE))
+$(info VERSION_BUILD_SHORT           = $(VERSION_BUILD_SHORT))
+$(info BUILD_DATE                    = $(BUILD_DATE))
+$(info [Path])
+$(info PUBLISH_LOCAL_WFSE_DIR        = $(PUBLISH_LOCAL_WFSE_DIR))
+$(info PUBLISH_LOCAL_ARTIFACT_DIR    = $(PUBLISH_LOCAL_ARTIFACT_DIR))
+$(info TOP_BIN_DIR                   = $(TOP_BIN_DIR))
+$(info XLIB_DIR                      = $(XLIB_DIR))
+$(info INSTALL_DIR                   = $(INSTALL_DIR))
+$(info [File])
+$(info ZIP_FILE_NAME_BIN             = $(ZIP_FILE_NAME_BIN))
+$(info ZIP_FILE_NAME_XLIB            = $(ZIP_FILE_NAME_XLIB))
+$(info ZIP_FILE_NAME_INSTALL         = $(ZIP_FILE_NAME_INSTALL))
+$(info ZIP_FILE_NAME_INSTALL_SMALL   = $(ZIP_FILE_NAME_INSTALL_SMALL))
+$(info ZIP_FILE_NAME_SYMBOL          = $(ZIP_FILE_NAME_SYMBOL))
+$(info --------------------------------------------------------------)
+$(info )
+
+
+#
+# Targets
+#
+
+.PHONY: all
+all: product support archive
+
+.PHONY: product
+product: wfse
+
+.PHONY: wfse
+wfse:
+	@echo "Publishing WFSE-64 MSI file(s) to local file system"
+	@if [ ! -d $(PUBLISH_DIR) ]; then \
+		echo "$(PUBLISH_DIR) does not exist" ; \
+		exit 1 ; \
+	fi
+	@if [ ! -d $(PUBLISH_LOCAL_WFSE_DIR) ]; then \
+		mkdir -p $(PUBLISH_LOCAL_WFSE_DIR) ; \
+	fi
+	cp -pf $(PUBLISH_DIR)/*.zip $(PUBLISH_LOCAL_WFSE_DIR)
+	ls -l $(PUBLISH_LOCAL_WFSE_DIR)
+	@echo "[BUILD MANIFEST] Product Name         : Windows File Server Enforcer"
+	@echo "[BUILD MANIFEST]   Installer Location : $(PUBLISH_LOCAL_WFSE_DIR)"
+	@echo "[BUILD MANIFEST]   Installer Package  : $$(cd $(PUBLISH_DIR); ls -1 *.zip | tr '\n' ' ')"
+
+.PHONY: archive
+archive: archive_bin archive_install
+
+# Notes: Backup build binaries and symbols. We need symbol files (.pdb) to analyze dump
+# file.
+
+.PHONY: archive_bin
+archive_bin:
+	@echo "Archiving top-level bin directory"
+	@if [ ! -d $(TOP_BIN_DIR) ]; then \
+		echo "$(TOP_BIN_DIR) does not exist" ; \
+		exit 1 ; \
+	fi
+	@if [ ! -d $(PUBLISH_LOCAL_ARTIFACT_DIR) ]; then \
+		mkdir -p $(PUBLISH_LOCAL_ARTIFACT_DIR) ; \
+	fi
+	cp -pf $(NLBUILDROOT)/build.config* $(NLBUILDROOT)/bin
+	cp -pf $(NLBUILDROOT)/build*.log $(NLBUILDROOT)/bin
+	cd $(NLBUILDROOT)/ ; tar cf - `find nlwfse/x64 nlwfsedll/x64 x64 -type f | grep pdb` | ( cd $(NLBUILDROOT)/bin ; tar xf - )
+	cd $(NLBUILDROOT)/ ; zip -r -b . $(PUBLISH_LOCAL_ARTIFACT_DIR)/$(ZIP_FILE_NAME_BIN) bin -x bin/installer/*.zip
+	ls -l $(PUBLISH_LOCAL_ARTIFACT_DIR)
+	@echo "[BUILD MANIFEST] Archive: $(PUBLISH_LOCAL_ARTIFACT_DIR)/$(ZIP_FILE_NAME_BIN)"
+
+# Notes: Backup external libraries we used in a build so that we can always repeat a
+# build at a later time. Notice that externals are not versioned and build scripts always
+# use the latest externals. As a result, we will not be able to gaurantee a build can
+# be repeated with the same externals without backing up xlib.
+
+.PHONY: archive_xlib
+archive_xlib:
+	@echo "Archiving build tree xlib directory"
+	@if [ ! -d $(XLIB_DIR) ]; then \
+		echo "$(XLIB_DIR) does not exist" ; \
+		exit 1 ; \
+	fi
+	@if [ ! -d $(PUBLISH_LOCAL_ARTIFACT_DIR) ]; then \
+		mkdir -p $(PUBLISH_LOCAL_ARTIFACT_DIR) ; \
+	fi
+	cd $(NLBUILDROOT); zip -r -b . $(PUBLISH_LOCAL_ARTIFACT_DIR)/$(ZIP_FILE_NAME_XLIB) xlib
+	ls -l $(PUBLISH_LOCAL_ARTIFACT_DIR)
+	@echo "[BUILD MANIFEST] Archive: $(PUBLISH_LOCAL_ARTIFACT_DIR)/$(ZIP_FILE_NAME_XLIB)"
+
+# Notes: Backup installer build artifacts so that we can patch installers without rebuilding.
+# All Fate intstallers are in /install directory.
+
+.PHONY: archive_install
+archive_install:
+	@echo "Archiving installer build directory"
+	@if [ ! -d $(INSTALL_DIR) ]; then \
+		echo "$(INSTALL_DIR) does not exist" ; \
+		exit 1 ; \
+	fi
+	@if [ ! -d $(PUBLISH_LOCAL_ARTIFACT_DIR) ]; then \
+		mkdir -p $(PUBLISH_LOCAL_ARTIFACT_DIR) ; \
+	fi
+	rm -f $(PUBLISH_LOCAL_ARTIFACT_DIR)/$(ZIP_FILE_NAME_INSTALL)
+	cd $(NLBUILDROOT); find . -maxdepth 1 -type f | zip -r -b . $(PUBLISH_LOCAL_ARTIFACT_DIR)/$(ZIP_FILE_NAME_INSTALL) -@
+	cd $(NLBUILDROOT); find build install -type f | zip -r -b . $(PUBLISH_LOCAL_ARTIFACT_DIR)/$(ZIP_FILE_NAME_INSTALL) -@
+	ls -l $(PUBLISH_LOCAL_ARTIFACT_DIR)
+	@echo "[BUILD MANIFEST] Archive: $(PUBLISH_LOCAL_ARTIFACT_DIR)/$(ZIP_FILE_NAME_INSTALL)"
+
+.PHONY: manifest
+manifest:
+	@echo "Publish build manifest to artifacts directory"
+	@if [ ! -f $(BUILD_MANIFEST_FILE_NAME) ]; then \
+		echo "$(BUILD_MANIFEST_FILE_NAME) does not exist" ; \
+		exit 1 ; \
+	fi
+	@if [ ! -d $(PUBLISH_LOCAL_ARTIFACT_DIR) ]; then \
+		mkdir -p $(PUBLISH_LOCAL_ARTIFACT_DIR) ; \
+	fi
+	cp -pf $(NLBUILDROOT)/$(BUILD_MANIFEST_FILE_NAME) $(PUBLISH_LOCAL_ARTIFACT_DIR)
+	ls -l $(PUBLISH_LOCAL_ARTIFACT_DIR)
